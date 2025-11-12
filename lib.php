@@ -1,0 +1,510 @@
+<?php
+// This file is part of Moodle - https://moodle.org/
+//
+// Moodle is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Moodle is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
+
+/**
+ * Main repository class for Cloud Poodll AI image generator.
+ *
+ * @package    repository_cloudpoodll
+ * @copyright  2025
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+
+defined('MOODLE_INTERNAL') || die();
+
+// Core repository base lives at /public/repository/lib.php relative to public dirroot.
+// In this migrated structure $CFG->dirroot already points to the public root (see public/lib/setup.php).
+require_once($CFG->dirroot . '/repository/lib.php');
+
+use repository_cloudpoodll\constants;
+use repository_cloudpoodll\utils;
+use repository_cloudpoodll\imagegen;
+
+/**
+ * Repository implementation for generating images from prompts.
+ */
+class repository_cloudpoodll extends repository
+{
+
+ 
+    /**
+     * Supported return types.
+     * @return int
+     */
+    public function supported_returntypes()
+    {
+        return FILE_EXTERNAL | FILE_INTERNAL; // We could download later if needed.
+    }
+
+    /**
+     * Enable the global search (used here as a prompt input field).
+     * @return bool
+     */
+    public function global_search()
+    {
+        return false; // Enables the search box used as prompt input.
+    }
+
+    /**
+     * Indicates this repository uses Moodle files (draft area).
+     * @return bool
+     */
+    public function has_moodle_files() {
+        return true;
+    }
+
+    public function get_listing($path = '', $page = 0)
+    {
+
+        global $USER, $OUTPUT;
+
+        // Empty List
+        $list = [
+            'list' => [],
+            'manage' => false,
+            'dynload' => true,
+            'nologin' => true,
+            'nosearch' => false,
+            'issearchresult' => false,
+            'path' => [],
+        ];
+         return $list;
+    }
+
+    public function print_login()
+    {
+        return $this->get_listing();
+    }
+
+       /**
+     * Add Plugin settings input to Moodle form.
+     *
+     * @param MoodleQuickForm $mform Moodle form (passed by reference)
+     * @param string $classname repository class name
+     */
+    public static function type_config_form($mform, $classname = 'repository') {
+        parent::type_config_form($mform);
+
+        $strrequired = get_string('required');
+
+        // API User.
+        $mform->addElement('text', 'apiuser', get_string('apiuser', constants::M_COMPONENT));
+        $mform->setType('apiuser', PARAM_TEXT);
+        $mform->addHelpButton('apiuser', 'apiuser', constants::M_COMPONENT);
+
+        // API Secret.
+        $mform->addElement('text', 'apisecret', get_string('apisecret', constants::M_COMPONENT));
+        $mform->setType('apisecret', PARAM_TEXT);
+        $mform->addHelpButton('apisecret', 'apisecret', constants::M_COMPONENT);
+
+        // Cloud Poodll Server.
+        $mform->addElement('text', 'cloudpoodllserver', get_string('cloudpoodllserver', constants::M_COMPONENT));
+        $mform->setType('cloudpoodllserver', PARAM_URL);
+        $mform->setDefault('cloudpoodllserver', 'https://cloud.poodll.com');
+        $mform->addHelpButton('cloudpoodllserver', 'cloudpoodllserver', constants::M_COMPONENT);
+
+        // AWS Region.
+        $regions = utils::get_region_options();
+        $mform->addElement('select', 'awsregion', get_string('awsregion', constants::M_COMPONENT), $regions);
+        $mform->setDefault('awsregion', 'useast1');
+        $mform->addHelpButton('awsregion', 'awsregion', constants::M_COMPONENT);
+    }
+
+     /**
+     * Option names of dropbox plugin.
+     *
+     * @inheritDocs
+     */
+    public static function get_type_option_names() {
+        return [
+                'cloudpoodllserver',
+                'apiuser',
+                'apisecret',
+                'awsregion',
+                'pluginname',
+            ];
+    }
+
+    /**
+     * Render the search (prompt) input box.
+     * @return string
+     */
+    public function print_search()
+    {
+        global $OUTPUT;
+
+        $currentprompt = optional_param('s', '', PARAM_TEXT);
+        $currentstyle = optional_param('imagetype', 'flat vector illustration', PARAM_TEXT);
+        $currentimage = optional_param('selectedimage', '', PARAM_RAW);
+
+        $fileslist = $this->fetch_files_list();
+        $imagelist = [];
+        foreach ($fileslist['list'] as $fileinfo) {
+            $imagelist[] = [
+                'title' => $fileinfo['title'] ?? '',
+                'thumbnail' => $fileinfo['thumbnail'] ?? '',
+                'realthumbnail' => $fileinfo['realthumbnail'] ?? '',
+                'selected' => ($currentimage !== '' && ($fileinfo['title'] ?? '') === $currentimage),
+            ];
+        }
+
+        $styles = [];
+        foreach ($this->fetch_image_options() as $option) {
+            $styles[] = [
+                'value' => $option->value,
+                'label' => $option->label,
+                'selected' => ($option->value === $currentstyle),
+            ];
+        }
+
+        $context = [
+            'formid' => 'cloudpoodll-imagegen-' . uniqid('', true),
+            'prompt' => $currentprompt,
+            'imagestyles' => $styles,
+            'images' => $imagelist,
+            'showclearoption' => !empty($imagelist),
+            'nocurrent' => ($currentimage === ''),
+        ];
+
+        $out = html_writer::start_div('repository_cloudpoodll_image_prompt_wrapper');
+        $out .= $OUTPUT->render_from_template('repository_cloudpoodll/imagegenform', $context);
+        $out .= html_writer::end_div();
+        return $out;
+    }
+
+    /**
+     * Generate an image from the prompt (search text) and present it as a single result.
+     * @param string $searchtext
+     * @param int $page
+     * @return array
+     */
+    public function search($searchtext, $page = 0)
+    {
+        global $USER;
+
+        // Default results structure.
+        $results = [
+            'list' => [],
+            'page' => $page,
+            'pages' => 1,
+        ];
+
+        // Get the submitted prompt.
+        $prompt = trim($searchtext ?? '');
+        $selectedimage = null;
+
+        // No prompt, no results.
+        if ($prompt === '') {
+            return $results;
+        }
+
+        // Get the selected image style.
+        $imagetype = optional_param('imagetype', 'flat vector illustration', PARAM_RAW);
+
+        // Get the selected image  (or no image selected to generate new ).
+        $selectedimagefilename = optional_param('selectedimage', '', PARAM_RAW);
+        if (!empty($selectedimagefilename)) {
+            $selectedimage  = $this->fetch_file_by_filename($selectedimagefilename);
+            // If this fails that is bad, so just return no results
+            if (!$selectedimage) {
+                return $results;
+            }
+        }
+
+        $imagegen = new imagegen();
+        $fs = get_file_storage();
+        $draftid = file_get_unused_draft_itemid();
+
+        // Create or edit image via function.
+        if (!empty($selectedimagefilename) && $selectedimage) {
+            $filename = $selectedimagefilename;
+            $fileinfo  = $imagegen->edit_image(
+                $prompt,
+                $draftid,
+                $selectedimage,
+                $selectedimagefilename
+            );
+
+        } else {
+            $prompt = $prompt . '[NB The image style is: ' . $imagetype . ']';
+            $filename = 'imagegen_' . time() . '.png';
+            $fileinfo  = $imagegen->generate_image(
+                $prompt,
+                $draftid,
+                $filename
+            );
+        }
+
+        // No fileinfo, no results.
+        if (!$fileinfo) {
+            return $results;
+        }
+
+        // Build the source reference for Moodle file API.
+        $sourceinfo = [
+            'contextid' => context_user::instance($USER->id)->id,
+            'component' => 'user',
+            'filearea' => 'draft',
+            'itemid' => $fileinfo['draftitemid'],
+            'filepath' => '/',
+            'filename' => $fileinfo['filename'],
+        ];
+        $source = base64_encode(json_encode($sourceinfo));
+
+        $results['list'][] = [
+            'title' => $fileinfo['filename'],
+            'shorttitle' => $fileinfo['filename'],
+            'thumbnail' => $fileinfo['drafturl'],
+            'thumbnail_height' => 256,
+            'thumbnail_width' => 256,
+            'source' => $source,
+            'url' => $fileinfo['drafturl'],
+        ];
+
+        // This prevents showing the really big search results box. They can press a button to go back.
+        $results['nosearch'] = true;
+
+        // Return the results.
+        return $results;
+
+        // After this is the old code
+
+        // Store file in user draft area.
+        // TO DO -  we  can probably use repository helper functions for this.
+        // in particular if we are editing files we want to overwrite the existing file.
+        $fs = get_file_storage();
+        $draftid = file_get_unused_draft_itemid();
+        $filerec = [
+            'contextid' => context_user::instance($USER->id)->id,
+            'component' => 'user',
+            'filearea' => 'draft',
+            'itemid' => $draftid,
+            'filepath' => '/',
+            'filename' => $filename,
+        ];
+        if (
+            !$fs->file_exists(
+                $filerec['contextid'],
+                $filerec['component'],
+                $filerec['filearea'],
+                $filerec['itemid'],
+                $filerec['filepath'],
+                $filerec['filename']
+            )
+        ) {
+            $fs->create_file_from_string($filerec, $imagedata);
+        }
+
+        $fileurl = moodle_url::make_draftfile_url($draftid, '/', $filename)->out(false);
+
+        $results['list'][] = [
+            'title' => $filename,
+            'shorttitle' => $filename,
+            'thumbnail' => $fileurl,
+            'thumbnail_height' => 256,
+            'thumbnail_width' => 256,
+            'size' => strlen($imagedata),
+            'source' => $fileurl,
+            'url' => $fileurl,
+        ];
+
+        // This prevents showing the really big search results box. They can press a button to go back
+        $results['nosearch'] = true;
+
+        // Return the results
+        return $results;
+    }
+
+      /*
+     * Download a file, this function can be overridden by subclass. {@link curl}
+     *
+     * @param string $url the url of file
+     * @param string $filename save location
+     * @return array with elements:
+     *   path: internal location of the file
+     *   url: URL to the source (from parameters)
+     */
+    public function xxget_file($url, $filename = '') {
+        global $USER;
+        
+        // Get the filename as used by our recorder.
+        // Strip off the ?player=xx bit.
+        $url = strtok($url, '?');
+        $recordedname = basename($url);
+
+        // Get a temporary download path
+        $path = $this->prepare_file($filename);
+
+        //fetch the file we submitted earlier
+        $fs = get_file_storage();
+        $context = context_user::instance($USER->id);
+        $f = $fs->get_file($context->id, "user", "draft",
+            "0", "/", $recordedname);
+
+        //write the file out to the temporary location
+        $fhandle = fopen($path, 'w');
+        $data = $f->get_content();
+        $result = fwrite($fhandle, $data);
+
+        // Close file handler.
+        fclose($fhandle);
+
+        // Bail if we errored out.
+        if ($result === false) {
+            unlink($path);
+            return null;
+        } else {
+            // Clear up the original file which we no longer need.
+            self::delete_tempfile_from_draft("0", "/", $recordedname);
+        }
+
+        // Return to Moodle what it needs to know.
+        return ['path' => $path, 'url' => $url];
+    }
+
+    /**
+     * Generate a placeholder PNG image with the prompt text.
+     * @param string $prompt
+     * @return string PNG binary
+     */
+    private function generate_placeholder_image(string $prompt): string
+    {
+        // Very small GD-based PNG with the prompt text (first 40 chars) for prototype purposes.
+        $text = mb_substr($prompt, 0, 40);
+        $width = 512;
+        $height = 512;
+        $im = imagecreatetruecolor($width, $height);
+        $bg = imagecolorallocate($im, 240, 240, 255);
+        imagefilledrectangle($im, 0, 0, $width, $height, $bg);
+        $tc = imagecolorallocate($im, 60, 60, 90);
+        $font = 5; // Built-in font.
+        $wrapped = wordwrap($text, 20, "\n", true);
+        $lines = explode("\n", $wrapped);
+        $y = 10;
+        foreach ($lines as $line) {
+            $x = (int) (($width - imagefontwidth($font) * strlen($line)) / 2);
+            imagestring($im, $font, max(0, $x), $y, $line, $tc);
+            $y += imagefontheight($font) + 6;
+        }
+        ob_start();
+        imagepng($im);
+        imagedestroy($im);
+        return ob_get_clean();
+    }
+
+    public function fetch_image_options()
+    {
+        return [
+            (object) ['value' => 'flat vector illustration', 'label' => get_string('imagetype_flatvectorillustration', constants::M_COMPONENT)],
+            (object) ['value' => 'cartoon', 'label' => get_string('imagetype_cartoon', constants::M_COMPONENT)],
+            (object) ['value' => 'photorealistic', 'label' => get_string('imagetype_photorealistic', constants::M_COMPONENT)],
+            (object) ['value' => 'digital painting', 'label' => get_string('imagetype_digitalpainting', constants::M_COMPONENT)],
+            (object) ['value' => 'line drawing', 'label' => get_string('imagetype_linedrawing', constants::M_COMPONENT)],
+            (object) ['value' => '3d render', 'label' => get_string('imagetype_3drender', constants::M_COMPONENT)],
+            (object) ['value' => 'infographic', 'label' => get_string('imagetype_infographic', constants::M_COMPONENT)],
+        ];
+    }
+
+    public function fetch_file_by_filename($filename)
+    {
+        global $USER, $OUTPUT;
+
+        $itemid = optional_param('itemid', 0, PARAM_INT);
+        $context = context_user::instance($USER->id);
+        $fs = get_file_storage();
+        $file = $fs->get_file(
+            $context->id,
+            'user',
+            'draft',
+            $itemid,
+            '/',
+            $filename
+        );
+        return $file;
+    }
+
+    /**
+     * TO DO - restrict this to images
+     * Fetch the list of previously generated images from user draft area.
+     * @return array
+     */
+    public function fetch_files_list()
+    {
+        global $USER, $OUTPUT;
+
+        $result = [
+            'list' => [],
+        ];
+
+        $itemid = optional_param('itemid', 0, PARAM_INT);
+        if (empty($itemid)) {
+            return $result;
+        }
+
+        $context = context_user::instance($USER->id);
+        $fs = get_file_storage();
+        $files = $fs->get_area_files(
+            $context->id,
+            'user',
+            'draft',
+            $itemid,
+            'timemodified DESC',
+            false,
+            0,
+            false
+        );
+
+        foreach ($files as $file) {
+            if ($file->is_directory()) {
+                continue;
+            }
+
+            $fileurl = moodle_url::make_draftfile_url($itemid, $file->get_filepath(), $file->get_filename());
+            $entry = [
+                'title' => $file->get_filename(),
+                'thumbnail' => $OUTPUT->image_url(file_file_icon($file))->out(false),
+            ];
+
+            if ($imageinfo = $file->get_imageinfo()) {
+                $entry['realthumbnail'] = $fileurl->out(false, [
+                    'preview' => 'thumb',
+                    'oid' => $file->get_timemodified(),
+                ]);
+            }
+
+            $result['list'][] = $entry;
+        }
+
+        return $result;
+    }
+
+    /**
+     * No specific init needed.
+     * @return bool
+     */
+    public static function plugin_init()
+    {
+        return true;
+    }
+
+    /**
+     * No external auth required.
+     * @return bool
+     */
+    public function check_login()
+    {
+        return true; // False shows print_login form.
+    }
+}

@@ -9,7 +9,7 @@ It requires a Poodll subscription (Poodll Media, Poodll Languages, Poodll Essent
 - Image Editing: Edit existing images from text prompts and an existing image.
 
 ## Installation
-1. Clone the repository or download the plugin at:
+1. Clone the repository or download the plugin from: https://github.com/justinhunt/moodle-repository_cloudpoodll
 2. Place the `cloudpoodll` folder in the `repository` directory of your Moodle installation.
 3. Navigate to the Site administration > Notifications page in Moodle to complete the installation.
 4. Configure the plugin settings by going to Site administration > Plugins > Repositories > Manage Repositories. There set "Cloud Poodll" to "Enabled and Visible." This will take you to the settings page.

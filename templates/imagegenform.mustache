@@ -38,12 +38,12 @@
 <div class="repo-cp-imagegen"{{#formid}} id="{{formid}}"{{/formid}}>
     <div class="repo-cp-field">
         <label class="repo-cp-label" for="{{formid}}-prompt">{{#str}} enterprompt, repository_cloudpoodll {{/str}}</label>
-    <textarea class="repo-cp-textarea" id="{{formid}}-prompt" name="s" rows="3" placeholder="{{#str}} promptplaceholder, repository_cloudpoodll {{/str}}">{{prompt}}</textarea>
+    <textarea class="repo-cp-textarea form-control" id="{{formid}}-prompt" name="s" rows="3" placeholder="{{#str}} promptplaceholder, repository_cloudpoodll {{/str}}">{{prompt}}</textarea>
     </div>
 
     <div class="repo-cp-field">
         <label class="repo-cp-label" for="{{formid}}-style">{{#str}} imagetype, repository_cloudpoodll {{/str}}</label>
-        <select class="repo-cp-select" id="{{formid}}-style" name="imagetype">
+        <select class="repo-cp-select form-control" id="{{formid}}-style" name="imagetype">
             {{#imagestyles}}
                 <option value="{{value}}"{{#selected}} selected{{/selected}}>{{label}}</option>
             {{/imagestyles}}
@@ -55,7 +55,7 @@
             {{#showclearoption}}
                 <label class="repo-cp-radio">
                     <input type="radio" name="selectedimage" value=""{{#nocurrent}} checked{{/nocurrent}}>
-                    <span>{{#str}} noimagelabel, repository_cloudpoodll {{/str}}</span>
+                    <span class="repo-cp-radio-noimage">{{#str}} noimagelabel, repository_cloudpoodll {{/str}}</span>
                 </label>
             {{/showclearoption}}
 
@@ -81,7 +81,7 @@
     </div>
 
     <div class="repo-cp-actions">
-        <button type="submit" class="repo-cp-submit">{{#str}} makeimage, repository_cloudpoodll {{/str}}</button>
+        <button type="submit" class="repo-cp-submit btn btn-primary">{{#str}} makeimage, repository_cloudpoodll {{/str}}</button>
     </div>
 </div>
 

@@ -2,37 +2,45 @@ div.repository_cloudpoodll div.fp-content:has( div.fp-error.nofilesavailable) {
   display: none;
 }
 
-.repo-cp-imagegen {
+.repository_cloudpoodll .fp-repo-items .fp-viewbar {
+    display: none;
+}
+
+.repository_cloudpoodll .fp-navbar:has(.fp-tb-search:not(.disabled))+.fp-content {
+    height: 100px;
+}
+
+.repository_cloudpoodll .fp-toolbar div.repo-cp-imagegen {
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
     font-size: 0.95rem;
 }
 
-.repo-cp-field {
+.repository_cloudpoodll .fp-toolbar div.repo-cp-field {
     display: flex;
     flex-direction: column;
     gap: 0.35rem;
 }
 
-.repo-cp-label {
+.repository_cloudpoodll .fp-toolbar div.repo-cp-label {
     font-weight: 600;
     font-size: 0.9rem;
 }
 
-.repo-cp-textarea {
+.repository_cloudpoodll .fp-toolbar div.repo-cp-textarea {
     resize: vertical;
     min-height: 4.5rem;
     padding: 0.5rem;
     font-size: 0.95rem;
 }
 
-.repo-cp-select {
+.repository_cloudpoodll .fp-toolbar div.repo-cp-select {
     padding: 0.4rem;
     font-size: 0.95rem;
 }
 
-.repo-cp-image-list {
+.repository_cloudpoodll .fp-toolbar div.repo-cp-image-list {
     max-height: 10rem;
     overflow-y: auto;
     border: 1px solid #ddd;
@@ -44,7 +52,7 @@ div.repository_cloudpoodll div.fp-content:has( div.fp-error.nofilesavailable) {
     background: #fafafa;
 }
 
-.repo-cp-radio {
+.repository_cloudpoodll .fp-toolbar div.repo-cp-radio {
     display: flex;
     align-items: flex-start;
     gap: 0.5rem;
@@ -53,17 +61,17 @@ div.repository_cloudpoodll div.fp-content:has( div.fp-error.nofilesavailable) {
     font-size: 0.9rem;
 }
 
-.repo-cp-radio input[type="radio"] {
+.repository_cloudpoodll .fp-toolbar div.repo-cp-radio input[type="radio"] {
     margin-top: 0.25rem;
 }
 
-.repo-cp-radio-thumb {
+.repository_cloudpoodll .fp-toolbar div.repo-cp-radio-thumb {
     display: flex;
     align-items: center;
     gap: 0.4rem;
 }
 
-.repo-cp-radio-thumb img {
+.repository_cloudpoodll .fp-toolbar div.repo-cp-radio-thumb img {
     width: 3rem;
     height: 3rem;
     object-fit: cover;
@@ -71,24 +79,49 @@ div.repository_cloudpoodll div.fp-content:has( div.fp-error.nofilesavailable) {
     border: 1px solid #ccc;
 }
 
-.repo-cp-radio-caption {
+.repository_cloudpoodll .fp-toolbar div.repo-cp-radio-caption {
     max-width: 12rem;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
-.repo-cp-empty {
+.repository_cloudpoodll .fp-toolbar div.repo-cp-empty {
     font-style: italic;
     color: #666;
 }
 
-.repo-cp-actions {
+.repository_cloudpoodll .fp-toolbar div.repo-cp-actions {
     display: flex;
-    justify-content: flex-end;
+    justify-content: center;
 }
 
 .cloudpoodll-submit {
     padding: 0.5rem 1.25rem;
     font-size: 0.95rem;
+}
+
+.repository_cloudpoodll .fp-toolbar,
+.repository_cloudpoodll .fp-toolbar .fp-tb-search,
+.repository_cloudpoodll .fp-toolbar .fp-tb-search .repository_cloudpoodll_image_prompt_wrapper,
+.repository_cloudpoodll .fp-toolbar .fp-tb-search .repository_cloudpoodll_image_prompt_wrapper .repo-cp-imagegen {
+    width: 100%;
+}
+
+.repository_cloudpoodll .repo-cp-field .repo-cp-radio {
+    display: flex;
+}
+
+.repository_cloudpoodll .repo-cp-field .repo-cp-radio .repo-cp-radio-thumb {
+    display: flex;
+    align-items: center;
+}
+
+.repository_cloudpoodll select.repo-cp-select {
+   appearance: auto;
+}
+
+.repo-cp-radio span.repo-cp-radio-thumb,
+.repo-cp-radio span.repo-cp-radio-noimage {
+    padding-left: 10px
 }

@@ -37,7 +37,7 @@
 // along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
 $string['configplugin'] = 'Cloud Poodll configuration';
-$string['pluginname'] = 'Cloud Poodll (AI image generator)';
+$string['pluginname'] = 'Cloud Poodll (Image Generator)';
 $string['pluginname_help'] = 'Generate images from text prompts and insert them directly via the file picker.';
 $string['privacy:metadata'] = 'The Cloud Poodll repository plugin does not store personal data.';
 $string['configapikey'] = 'Cloud Poodll API key';

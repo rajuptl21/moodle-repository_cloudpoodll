@@ -45,7 +45,11 @@ class repository_cloudpoodll extends repository
      */
     public function supported_returntypes()
     {
-        return FILE_EXTERNAL | FILE_INTERNAL; // We could download later if needed.
+        return FILE_INTERNAL;
+    }
+
+    public function supported_filetypes() {
+        return array('web_image');
     }
 
     /**
@@ -278,131 +282,8 @@ class repository_cloudpoodll extends repository
 
         // Return the results.
         return $results;
-
-        // After this is the old code
-
-        // Store file in user draft area.
-        // TO DO -  we  can probably use repository helper functions for this.
-        // in particular if we are editing files we want to overwrite the existing file.
-        $fs = get_file_storage();
-        $draftid = file_get_unused_draft_itemid();
-        $filerec = [
-            'contextid' => context_user::instance($USER->id)->id,
-            'component' => 'user',
-            'filearea' => 'draft',
-            'itemid' => $draftid,
-            'filepath' => '/',
-            'filename' => $filename,
-        ];
-        if (
-            !$fs->file_exists(
-                $filerec['contextid'],
-                $filerec['component'],
-                $filerec['filearea'],
-                $filerec['itemid'],
-                $filerec['filepath'],
-                $filerec['filename']
-            )
-        ) {
-            $fs->create_file_from_string($filerec, $imagedata);
-        }
-
-        $fileurl = moodle_url::make_draftfile_url($draftid, '/', $filename)->out(false);
-
-        $results['list'][] = [
-            'title' => $filename,
-            'shorttitle' => $filename,
-            'thumbnail' => $fileurl,
-            'thumbnail_height' => 256,
-            'thumbnail_width' => 256,
-            'size' => strlen($imagedata),
-            'source' => $fileurl,
-            'url' => $fileurl,
-        ];
-
-        // This prevents showing the really big search results box. They can press a button to go back
-        $results['nosearch'] = true;
-
-        // Return the results
-        return $results;
     }
 
-      /*
-     * Download a file, this function can be overridden by subclass. {@link curl}
-     *
-     * @param string $url the url of file
-     * @param string $filename save location
-     * @return array with elements:
-     *   path: internal location of the file
-     *   url: URL to the source (from parameters)
-     */
-    public function xxget_file($url, $filename = '') {
-        global $USER;
-        
-        // Get the filename as used by our recorder.
-        // Strip off the ?player=xx bit.
-        $url = strtok($url, '?');
-        $recordedname = basename($url);
-
-        // Get a temporary download path
-        $path = $this->prepare_file($filename);
-
-        //fetch the file we submitted earlier
-        $fs = get_file_storage();
-        $context = context_user::instance($USER->id);
-        $f = $fs->get_file($context->id, "user", "draft",
-            "0", "/", $recordedname);
-
-        //write the file out to the temporary location
-        $fhandle = fopen($path, 'w');
-        $data = $f->get_content();
-        $result = fwrite($fhandle, $data);
-
-        // Close file handler.
-        fclose($fhandle);
-
-        // Bail if we errored out.
-        if ($result === false) {
-            unlink($path);
-            return null;
-        } else {
-            // Clear up the original file which we no longer need.
-            self::delete_tempfile_from_draft("0", "/", $recordedname);
-        }
-
-        // Return to Moodle what it needs to know.
-        return ['path' => $path, 'url' => $url];
-    }
-
-    /**
-     * Generate a placeholder PNG image with the prompt text.
-     * @param string $prompt
-     * @return string PNG binary
-     */
-    private function generate_placeholder_image(string $prompt): string
-    {
-        // Very small GD-based PNG with the prompt text (first 40 chars) for prototype purposes.
-        $text = mb_substr($prompt, 0, 40);
-        $width = 512;
-        $height = 512;
-        $im = imagecreatetruecolor($width, $height);
-        $bg = imagecolorallocate($im, 240, 240, 255);
-        imagefilledrectangle($im, 0, 0, $width, $height, $bg);
-        $tc = imagecolorallocate($im, 60, 60, 90);
-        $font = 5; // Built-in font.
-        $wrapped = wordwrap($text, 20, "\n", true);
-        $lines = explode("\n", $wrapped);
-        $y = 10;
-        foreach ($lines as $line) {
-            $x = (int) (($width - imagefontwidth($font) * strlen($line)) / 2);
-            imagestring($im, $font, max(0, $x), $y, $line, $tc);
-            $y += imagefontheight($font) + 6;
-        }
-        ob_start();
-        imagepng($im);
-        imagedestroy($im);
-        return ob_get_clean();
-    }
 
     public function fetch_image_options()
     {
@@ -436,8 +317,8 @@ class repository_cloudpoodll extends repository
     }
 
     /**
-     * TO DO - restrict this to images
-     * Fetch the list of previously generated images from user draft area.
+     *
+     * Fetch the list of existing mages from user draft area.
      * @return array
      */
     public function fetch_files_list()
@@ -470,6 +351,13 @@ class repository_cloudpoodll extends repository
             if ($file->is_directory()) {
                 continue;
             }
+
+            // continue if the file extension is not png / jpeg / jpg /webp
+            $extension = strtolower(pathinfo($file->get_filename(), PATHINFO_EXTENSION));
+            if (!in_array($extension, ['png', 'jpeg', 'jpg', 'webp'])) {
+                continue;
+            }
+
 
             $fileurl = moodle_url::make_draftfile_url($itemid, $file->get_filepath(), $file->get_filename());
             $entry = [

@@ -1,11 +1,12 @@
 # Cloud Poodll Repository (AI Image Generation) plugin for Moodle
 
-The Cloud Poodll repository plugin for Moodle adds an AI image generation and editing tool that is accessible for the HTML editor and file managers via the repository system.
+The Cloud Poodll repository plugin for Moodle adds an AI image generation and editing tool that is accessible from the HTML editor and file managers via the repository system.
 
-It requires a Poodll subscription (Poodll Media, Poodll Languages, Poodll Essentials, or a Poodll free trial). See how to get an account at https://poodll.com/get-free-trial. Or if you just want to know what it costs: https://poodll.com/pricing 
+It requires a Poodll subscription (Poodll Media, Poodll Languages, Poodll Essentials, or a Poodll free trial). 
+Get a Poodll free trial at https://poodll.com/get-free-trial. Or if you just want to know what it costs: https://poodll.com/pricing 
 
 ## Features
-- AI Image Generation: Generate images from text prompts.
+- Image Generation: Generate images from text prompts.
 - Image Editing: Edit existing images from text prompts and an existing image.
 
 ## Installation
@@ -14,7 +15,6 @@ It requires a Poodll subscription (Poodll Media, Poodll Languages, Poodll Essent
 3. Navigate to the Site administration > Notifications page in Moodle to complete the installation.
 4. Configure the plugin settings by going to Site administration > Plugins > Repositories > Manage Repositories. There set "Cloud Poodll" to "Enabled and Visible." This will take you to the settings page.
 5. On the settings page you will need to enter your Poodll API credentials.
-5. Enable the repository for the desired contexts (e.g., HTML editor, file manager).
 
 ## Usage
 

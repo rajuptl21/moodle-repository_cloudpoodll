@@ -38,7 +38,11 @@ use repository_cloudpoodll\imagegen;
 class repository_cloudpoodll extends repository
 {
 
- 
+    /**
+     * @var imagegen|null imagegen instance
+     */
+    protected $_imagegen = null;
+
     /**
      * Supported return types.
      * @return int
@@ -92,7 +96,7 @@ class repository_cloudpoodll extends repository
         return $this->get_listing();
     }
 
-       /**
+    /**
      * Add Plugin settings input to Moodle form.
      *
      * @param MoodleQuickForm $mform Moodle form (passed by reference)
@@ -103,27 +107,51 @@ class repository_cloudpoodll extends repository
 
         $strrequired = get_string('required');
 
+        $actionclass = \core_ai\aiactions\generate_image::class;
+        if (class_exists(\core_ai\manager::class)) {
+            $manager = \core\di::get(\core_ai\manager::class);
+            $allproviders = $manager->get_providers_for_actions([$actionclass], true);
+            if (!empty($allproviders[$actionclass])) {
+                foreach($allproviders[$actionclass] as $aiprovider) {
+                    $aiproviderrecord = $aiprovider->to_record();
+                    $options[$aiproviderrecord->id] = $aiproviderrecord->name;
+                }
+            }
+        }
+
+        $options[constants::CLOUDPOODLL_OPTION] = get_string('provider:cloudpoodll', constants::M_COMPONENT);
+
+        // API Provider
+        $mform->addElement('select', 'apiprovider', get_string('apiprovider', constants::M_COMPONENT), $options);
+        $mform->setType('apiprovider', PARAM_INT);
+        $mform->setDefault('apiprovider', constants::CLOUDPOODLL_OPTION);
+        $mform->addHelpButton('apiprovider', 'apiprovider', constants::M_COMPONENT);
+
         // API User.
         $mform->addElement('text', 'apiuser', get_string('apiuser', constants::M_COMPONENT));
         $mform->setType('apiuser', PARAM_TEXT);
         $mform->addHelpButton('apiuser', 'apiuser', constants::M_COMPONENT);
+        $mform->hideIf('apiuser', 'apiprovider', 'neq', constants::CLOUDPOODLL_OPTION);
 
         // API Secret.
         $mform->addElement('text', 'apisecret', get_string('apisecret', constants::M_COMPONENT));
         $mform->setType('apisecret', PARAM_TEXT);
         $mform->addHelpButton('apisecret', 'apisecret', constants::M_COMPONENT);
+        $mform->hideIf('apisecret', 'apiprovider', 'neq', constants::CLOUDPOODLL_OPTION);
 
         // Cloud Poodll Server.
         $mform->addElement('text', 'cloudpoodllserver', get_string('cloudpoodllserver', constants::M_COMPONENT));
         $mform->setType('cloudpoodllserver', PARAM_URL);
         $mform->setDefault('cloudpoodllserver', 'https://cloud.poodll.com');
         $mform->addHelpButton('cloudpoodllserver', 'cloudpoodllserver', constants::M_COMPONENT);
+        $mform->hideIf('cloudpoodllserver', 'apiprovider', 'neq', constants::CLOUDPOODLL_OPTION);
 
         // AWS Region.
         $regions = utils::get_region_options();
         $mform->addElement('select', 'awsregion', get_string('awsregion', constants::M_COMPONENT), $regions);
         $mform->setDefault('awsregion', 'useast1');
         $mform->addHelpButton('awsregion', 'awsregion', constants::M_COMPONENT);
+        $mform->hideIf('awsregion', 'apiprovider', 'neq', constants::CLOUDPOODLL_OPTION);
     }
 
      /**
@@ -133,6 +161,7 @@ class repository_cloudpoodll extends repository
      */
     public static function get_type_option_names() {
         return [
+                'apiprovider',
                 'cloudpoodllserver',
                 'apiuser',
                 'apisecret',
@@ -155,13 +184,15 @@ class repository_cloudpoodll extends repository
 
         $fileslist = $this->fetch_files_list();
         $imagelist = [];
-        foreach ($fileslist['list'] as $fileinfo) {
-            $imagelist[] = [
-                'title' => $fileinfo['title'] ?? '',
-                'thumbnail' => $fileinfo['thumbnail'] ?? '',
-                'realthumbnail' => $fileinfo['realthumbnail'] ?? '',
-                'selected' => ($currentimage !== '' && ($fileinfo['title'] ?? '') === $currentimage),
-            ];
+        if ($canedit = $this->can_edit_image()) {
+            foreach ($fileslist['list'] as $fileinfo) {
+                $imagelist[] = [
+                    'title' => $fileinfo['title'] ?? '',
+                    'thumbnail' => $fileinfo['thumbnail'] ?? '',
+                    'realthumbnail' => $fileinfo['realthumbnail'] ?? '',
+                    'selected' => ($currentimage !== '' && ($fileinfo['title'] ?? '') === $currentimage),
+                ];
+            }
         }
 
         $styles = [];
@@ -180,12 +211,27 @@ class repository_cloudpoodll extends repository
             'images' => $imagelist,
             'showclearoption' => !empty($imagelist),
             'nocurrent' => ($currentimage === ''),
+            'canedit' => $canedit
         ];
 
         $out = html_writer::start_div('repository_cloudpoodll_image_prompt_wrapper');
         $out .= $OUTPUT->render_from_template('repository_cloudpoodll/imagegenform', $context);
         $out .= html_writer::end_div();
         return $out;
+    }
+
+    /**
+     * @return imagegen
+     */
+    public function get_imagegen() {
+        if (!isset($this->_imagegen)) {
+            $this->_imagegen = new imagegen($this);
+        }
+        return $this->_imagegen;
+    }
+
+    public function can_edit_image() {
+        return $this->get_imagegen()->can_edit_image();
     }
 
     /**
@@ -219,7 +265,7 @@ class repository_cloudpoodll extends repository
 
         // Get the selected image  (or no image selected to generate new ).
         $selectedimagefilename = optional_param('selectedimage', '', PARAM_RAW);
-        if (!empty($selectedimagefilename)) {
+        if (!empty($selectedimagefilename) && $this->can_edit_image()) {
             $selectedimage  = $this->fetch_file_by_filename($selectedimagefilename);
             // If this fails that is bad, so just return no results
             if (!$selectedimage) {
@@ -227,14 +273,12 @@ class repository_cloudpoodll extends repository
             }
         }
 
-        $imagegen = new imagegen();
-        $fs = get_file_storage();
         $draftid = file_get_unused_draft_itemid();
 
         // Create or edit image via function.
-        if (!empty($selectedimagefilename) && $selectedimage) {
+        if (!empty($selectedimagefilename) && !empty($selectedimage)) {
             $filename = $selectedimagefilename;
-            $fileinfo  = $imagegen->edit_image(
+            $fileinfo  = $this->get_imagegen()->edit_image(
                 $prompt,
                 $draftid,
                 $selectedimage,
@@ -244,7 +288,7 @@ class repository_cloudpoodll extends repository
         } else {
             $prompt = $prompt . '[NB The image style is: ' . $imagetype . ']';
             $filename = 'imagegen_' . time() . '.png';
-            $fileinfo  = $imagegen->generate_image(
+            $fileinfo  = $this->get_imagegen()->generate_image(
                 $prompt,
                 $draftid,
                 $filename

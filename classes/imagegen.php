@@ -20,6 +20,7 @@ defined('MOODLE_INTERNAL') || die();
 
 use repository_cloudpoodll\constants;
 use repository_cloudpoodll\utils;
+use stored_file;
 
 /**
  * Class imagegen
@@ -78,7 +79,10 @@ class imagegen
      */
     public function edit_image($prompt, $draftid, $file, $filename)
     {
-        global $USER, $DB;
+        $providerrespose = $this->call_ai_provider_edit_image($prompt, $draftid, $file, $filename);
+        if (!is_null($providerrespose)) {
+            return $providerrespose;
+        }
         $params = $this->prepare_edit_image_payload($prompt, $file);
         if ($params) {
             $url = utils::get_cloud_poodll_server() . "/webservice/rest/server.php";
@@ -119,7 +123,10 @@ class imagegen
      */
     public function generate_image($prompt, $draftid, $filename)
     {
-        global $USER, $DB;
+        $providerrespose = $this->call_ai_provider_create_image($prompt, $draftid, $filename);
+        if (!is_null($providerrespose)) {
+            return $providerrespose;
+        }
         $params = $this->prepare_generate_image_payload(($prompt));
         if ($params) {
             $url = utils::get_cloud_poodll_server() . "/webservice/rest/server.php";
@@ -292,6 +299,183 @@ class imagegen
             }
         }
         return null;
+    }
+
+    /**
+     * @return bool
+     */
+    public function can_edit_image() {
+        $providerid = $this->conf->apiprovider ?? constants::CLOUDPOODLL_OPTION;
+        if ($providerid == constants::CLOUDPOODLL_OPTION) {
+            return true;
+        }
+        if (!class_exists(\core_ai\manager::class)) {
+            return false;
+        }
+        $manager = \core\di::get(\core_ai\manager::class);
+
+        $providerinstances = $manager->get_provider_instances(['id' => $providerid]);
+        $providerinstance = reset($providerinstances);
+        if (empty($providerinstance)) {
+            return false;
+        }
+        $providernamearr = explode('_', $providerinstance->provider, 2);
+        $providername = array_pop($providernamearr);
+        return in_array(strtolower($providername), [
+            'gemini'
+        ]);
+    }
+
+    public function call_ai_provider_create_image($prompt, $draftid, $filename) {
+        global $USER;
+        $context = \context_system::instance();
+        $actionclass = \core_ai\aiactions\generate_image::class;
+        $providerid = $this->conf->apiprovider ?? constants::CLOUDPOODLL_OPTION;
+        if ($providerid > 0 && class_exists(\core_ai\manager::class)) {
+            $manager = \core\di::get(\core_ai\manager::class);
+
+            $providerinstances = $manager->get_provider_instances(['id' => $providerid]);
+            /** @var \core_ai\provider $providerinstance */
+            $providerinstance = reset($providerinstances);
+            $providerenabled = !empty($providerinstance) &&
+                $manager->is_action_enabled(
+                    $providerinstance->provider,
+                    $actionclass,
+                    $providerinstance->id
+                );
+            if ($providerenabled) {
+                // Prepare the action.
+                $paramstructure = [
+                    'contextid' => $context->id,
+                    'prompttext' => $prompt,
+                    'aspectratio' => optional_param('aspectratio', 'square', PARAM_ALPHA),
+                    'quality' => optional_param('quality', 'standard', PARAM_ALPHA),
+                    'numimages' => optional_param('numimages', 1, PARAM_INT),
+                    'style' => optional_param('style', 'natural', PARAM_ALPHA),
+                ];
+                $action = new $actionclass(
+                    contextid: $paramstructure['contextid'],
+                    userid: $USER->id,
+                    prompttext: $paramstructure['prompttext'],
+                    quality: $paramstructure['quality'],
+                    aspectratio: $paramstructure['aspectratio'],
+                    numimages: $paramstructure['numimages'],
+                    style: $paramstructure['style'],
+                );
+
+                $reflclass = new \ReflectionClass($manager);
+                $reflmethod = $reflclass->getMethod('call_action_provider');
+                $reflmethod->setAccessible(true);
+
+                $result = $reflmethod->invoke($manager, $providerinstance, $action);
+
+                $reflmethod2 = $reflclass->getMethod('store_action_result');
+                $reflmethod2->setAccessible(true);
+
+                $reflmethod2->invoke($manager, $providerinstance, $action, $result);
+
+                if (!$result->get_success()) {
+                    return false;
+                }
+
+                $draftfile = $result->get_response_data()['draftfile'] ?? null;
+                return $this->process_ai_generated_file($draftfile, $draftid, $filename);
+            }
+        }
+        return null;
+    }
+
+    public function call_ai_provider_edit_image($prompt, $draftid, $file, $filename) {
+        global $CFG, $USER;
+        require_once($CFG->dirroot . '/repository/cloudpoodll/aiimplemetation/core_ai/aiactions/edit_image.php');
+        $context = \context_system::instance();
+        $actionclass = \core_ai\aiactions\generate_image::class;
+        $providerid = $this->conf->apiprovider ?? constants::CLOUDPOODLL_OPTION;
+        if ($providerid > 0 && class_exists(\core_ai\manager::class)) {
+            $manager = \core\di::get(\core_ai\manager::class);
+
+            $providerinstances = $manager->get_provider_instances(['id' => $providerid]);
+            /** @var \core_ai\provider $providerinstance */
+            $providerinstance = reset($providerinstances);
+            $providerenabled = !empty($providerinstance) &&
+                $manager->is_action_enabled(
+                    $providerinstance->provider,
+                    $actionclass,
+                    $providerinstance->id
+                );
+
+            if ($providerenabled) {
+                require_once($CFG->dirroot . '/repository/cloudpoodll/aiimplemetation/'.$providerinstance->provider.'/process_edit_image.php');
+                // Prepare the action.
+                $paramstructure = [
+                    'contextid' => $context->id,
+                    'prompttext' => $prompt,
+                    'aspectratio' => optional_param('aspectratio', 'square', PARAM_ALPHA),
+                    'quality' => optional_param('quality', 'standard', PARAM_ALPHA),
+                    'numimages' => optional_param('numimages', 1, PARAM_INT),
+                    'style' => optional_param('style', 'natural', PARAM_ALPHA),
+                ];
+                $action = new \core_ai\aiactions\edit_image(
+                    contextid: $paramstructure['contextid'],
+                    userid: $USER->id,
+                    prompttext: $paramstructure['prompttext'],
+                    quality: $paramstructure['quality'],
+                    aspectratio: $paramstructure['aspectratio'],
+                    numimages: $paramstructure['numimages'],
+                    style: $paramstructure['style'],
+                    stored_file: $file
+                );
+
+                $reflclass = new \ReflectionClass($manager);
+                $reflmethod = $reflclass->getMethod('call_action_provider');
+                $reflmethod->setAccessible(true);
+
+                $result = $reflmethod->invoke($manager, $providerinstance, $action);
+
+                $reflmethod2 = $reflclass->getMethod('store_action_result');
+                $reflmethod2->setAccessible(true);
+
+                $reflmethod2->invoke($manager, $providerinstance, $action, $result);
+
+                if (!$result->get_success()) {
+                    return false;
+                }
+
+                $draftfile = $result->get_response_data()['draftfile'] ?? null;
+                return $this->process_ai_generated_file($draftfile, $draftid, $filename);
+            }
+        }
+        return null;
+    }
+
+    public function process_ai_generated_file($draftfile, $draftid, $filename) {
+        if (empty($draftfile)) {
+            return false;
+        }
+        /** @var \stored_file $draftfile */
+        $smallerdata = $this->make_image_smaller($draftfile->get_content());
+        $base64data = base64_encode($smallerdata);
+        if (empty($base64data)) {
+            return false;
+        }
+        // Generate draft file
+        $filerecord = $this->base64ToFile($base64data, $draftid, $filename);
+        if ($filerecord) {
+            $draftid = $filerecord['itemid'];
+            $draftfileurl = \moodle_url::make_draftfile_url(
+                $draftid,
+                $filerecord['filepath'],
+                $filerecord['filename'],
+                false,
+            );
+            return [
+                'drafturl' => $draftfileurl->out(false),
+                'draftitemid' => $draftid,
+                'filename' => $filename,
+                'error' => false,
+            ];
+        }
+        return false;
     }
 
 }

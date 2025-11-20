@@ -36,6 +36,8 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
+$string['apiprovider'] = 'Api provider';
+$string['apiprovider_help'] = 'Choose api provider to use in image generation';
 $string['configplugin'] = 'Cloud Poodll configuration';
 $string['pluginname'] = 'Cloud Poodll (Image Generator)';
 $string['pluginname_help'] = 'Generate images from text prompts and insert them directly via the file picker.';
@@ -57,6 +59,7 @@ $string['imagetype_3drender'] = '3D render';
 $string['imagetype_infographic'] = 'Infographic';
 $string['noimagesmessage'] = 'No generated images available. Please generate an image first.';
 $string['noimagelabel'] = 'Do not use an existing image';
+$string['provider:cloudpoodll'] = 'Cloud poodll';
 $string['selectimage'] = 'Select image';
 $string['imagepreview'] = 'Image preview';
 $string['submitbutton'] = 'Make Image';

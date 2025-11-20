@@ -125,3 +125,7 @@ div.repository_cloudpoodll div.fp-content:has( div.fp-error.nofilesavailable) {
 .repo-cp-radio span.repo-cp-radio-noimage {
     padding-left: 10px
 }
+
+.repository_cloudpoodll .repo-cp-image-list .repo-cp-radio input[name="selectedimage"]:focus {
+    box-shadow: 0 0;
+}

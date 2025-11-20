@@ -27,11 +27,15 @@ defined('MOODLE_INTERNAL') || die();
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class constants {
-  
+
     //component name, db tables, things that define app
     const M_COMPONENT = 'repository_cloudpoodll';
 
     const M_SHORTNAME = 'cloudpoodll';
     const M_DEFAULT_CLOUDPOODLL = "cloud.poodll.com";
+
+    const CLOUDPOODLL_OPTION = -1;
+    const AIPROVIDER_COMPONENT = 'aiplacement_poodll';
+    const AIPROVIDER_ACTION = 'generate_wordcards_image';
 
 }
